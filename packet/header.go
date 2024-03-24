@@ -32,6 +32,7 @@ func (h Header) Write(w io.Writer) error {
 func readHeader(r io.Reader) (Header, error) {
 	var h Header
 	var err error
+
 	h.Length, err = read.VarInt(r)
 	if err != nil {
 		return h, fmt.Errorf("failed to read packet length: %w", err)
@@ -39,10 +40,12 @@ func readHeader(r io.Reader) (Header, error) {
 	if h.Length == 0 {
 		return h, nil
 	}
+
 	packetID, err := read.VarInt(r)
 	if err != nil {
 		return h, fmt.Errorf("failed to read packet id: %w", err)
 	}
 	h.PacketID = ID(packetID)
+
 	return h, nil
 }

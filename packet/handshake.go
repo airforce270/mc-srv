@@ -31,6 +31,7 @@ func ReadHandshake(r io.Reader, header Header) (Handshake, error) {
 	h := Handshake{Header: header}
 
 	var err error
+
 	h.ProtocolVersion, err = read.VarInt(r)
 	if err != nil {
 		return h, fmt.Errorf("failed to read protocol version: %w", err)

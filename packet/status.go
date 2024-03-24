@@ -58,7 +58,7 @@ func WriteStatusResponse(w io.Writer, protocol int) error {
 		Players: statusResponsePlayers{
 			Max:     34,
 			Online:  12,
-			Samples: []statusResponseSample{},
+			Samples: nil,
 		},
 		Description: textComponent{
 			Text: "The Minecraft client-server protocol kinda sucks ngl",
