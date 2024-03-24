@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"sync/atomic"
 
 	"github.com/airforce270/mc-srv/flags"
 )
@@ -25,16 +24,8 @@ var (
 	ErrStringTooLong = fmt.Errorf("string is too long (max=%d)", maxStrLen)
 )
 
-var timesWroteZero atomic.Int32
-
 // Byte writes a byte to the given writer.
 func Byte(w io.Writer, b byte) error {
-	if b == 0x00 {
-		if newN := timesWroteZero.Add(1); newN > 10 {
-			panic("wrote zero more than 10 times")
-		}
-	}
-
 	_, err := w.Write([]byte{b})
 	if err != nil {
 		return fmt.Errorf("failed to write byte %x: %w", b, err)
