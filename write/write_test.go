@@ -1,0 +1,133 @@
+package write_test
+
+import (
+	"bytes"
+	"fmt"
+	"testing"
+
+	"github.com/airforce270/mc-srv/write"
+	"github.com/google/go-cmp/cmp"
+)
+
+func TestByte(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input byte
+		want  []byte
+	}{
+		{'a', []byte{'a'}},
+		{'3', []byte{'3'}},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.Byte(&buf, tc.input); err != nil {
+				t.Fatalf("Byte() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Bytes() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestLong(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input int64
+		want  []byte
+	}{
+		{0, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}},
+		{1234, []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x04, 0xd2}},
+		{-1, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}},
+		{-123456789, []byte{0xff, 0xff, 0xff, 0xff, 0xf8, 0xa4, 0x32, 0xeb}},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.Long(&buf, tc.input); err != nil {
+				t.Fatalf("Long() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Long() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestString(t *testing.T) {
+	t.Parallel()
+
+	const strWithLen128 = "hi this is a test of a somewhat longer string blah blah blah blah blah blah blah blah blah blah blah blah blah blah blah blah bl"
+
+	tests := []struct {
+		input string
+		want  []byte
+	}{
+		{"", []byte{0x00}},
+		{"hi", []byte{0x02, 'h', 'i'}},
+		{strWithLen128, append([]byte{0x80, 0x01}, []byte(strWithLen128)...)},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(fmt.Sprintf("%s->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.String(&buf, tc.input); err != nil {
+				t.Fatalf("String() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("String() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestVarInt(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input int32
+		want  []byte
+	}{
+		{0, []byte{0x00}},
+		{1, []byte{0x01}},
+		{2, []byte{0x02}},
+		{127, []byte{0x7f}},
+		{128, []byte{0x80, 0x01}},
+		{255, []byte{0xff, 0x01}},
+		{25565, []byte{0xdd, 0xc7, 0x01}},
+		{2097151, []byte{0xff, 0xff, 0x7f}},
+		{2147483647, []byte{0xff, 0xff, 0xff, 0xff, 0x07}},
+		{-1, []byte{0xff, 0xff, 0xff, 0xff, 0x0f}},
+		{-2147483648, []byte{0x80, 0x80, 0x80, 0x80, 0x08}},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(fmt.Sprintf("%d->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.VarInt(&buf, tc.input); err != nil {
+				t.Fatalf("VarInt() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("VarInt() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
