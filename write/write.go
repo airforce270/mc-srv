@@ -2,13 +2,11 @@
 package write
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 
-	"github.com/airforce270/mc-srv/flags"
+	"github.com/google/uuid"
 )
 
 const (
@@ -24,29 +22,24 @@ var (
 	ErrStringTooLong = fmt.Errorf("string is too long (max=%d)", maxStrLen)
 )
 
+// Bool writes a boolean to the given writer.
+func Bool(w io.Writer, b bool) error {
+	var v byte = 0x00 // false
+	if b {
+		v = 0x01 // true
+	}
+	return Byte(w, v)
+}
+
 // Byte writes a byte to the given writer.
 func Byte(w io.Writer, b byte) error {
-	_, err := w.Write([]byte{b})
-	if err != nil {
-		return fmt.Errorf("failed to write byte %x: %w", b, err)
-	}
-	if *flags.Verbose {
-		log.Printf("WRITE %x (1)", []byte{b})
-	}
-	return nil
+	return Bytes(w, []byte{b})
 }
 
 // Long writes an int64 to the given writer.
 func Long(w io.Writer, v int64) error {
-	var logBuf bytes.Buffer
-	mw := io.MultiWriter(w, &logBuf)
-	if err := binary.Write(mw, binary.BigEndian, v); err != nil {
+	if err := binary.Write(w, binary.BigEndian, v); err != nil {
 		return fmt.Errorf("failed to write long %d: %w", v, err)
-	}
-	if *flags.Verbose {
-		length := logBuf.Len()
-		wrote := logBuf.Bytes()
-		log.Printf("WRITE %x (%d)", wrote, length)
 	}
 
 	return nil
@@ -61,11 +54,13 @@ func String(w io.Writer, s string) error {
 	if err := VarInt(w, l); err != nil {
 		return fmt.Errorf("failed to write string's length (%d): %w", l, err)
 	}
+
+	if len(s) == 0 {
+		return nil
+	}
+
 	if _, err := w.Write([]byte(s)); err != nil {
 		return fmt.Errorf("failed to write string (%s): %w", s, err)
-	}
-	if *flags.Verbose {
-		log.Printf("WRITE %x (%d)", []byte(s), len([]byte(s)))
 	}
 	return nil
 }
@@ -87,9 +82,33 @@ func VarInt(w io.Writer, v int32) error {
 	}
 }
 
-// VarInt writes a int32 to the given writer.
-func VarIntLen(v int32) (int, error) {
-	var buf bytes.Buffer
-	err := VarInt(&buf, v)
-	return buf.Len(), err
+// VarIntLen returns the serialized len of the given varint.
+func VarIntLen(v int32) int {
+	var buf discardingWriter
+	if err := VarInt(&buf, v); err != nil {
+		panic(fmt.Sprintf("Failed to write varint, this should never happen"+
+			" as discardingWriter does not return errors ever: %v", err))
+	}
+	return buf.Len()
+}
+
+// UUID writes a UUID to the given writer.
+func UUID(w io.Writer, v uuid.UUID) error {
+	b, err := v.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal UUID %s to bytes: %v", v, err)
+	}
+	return Bytes(w, b)
+}
+
+// Bytes writes the bytes to the given writer.
+func Bytes(w io.Writer, b []byte) error {
+	n, err := w.Write(b)
+	if err != nil {
+		return fmt.Errorf("failed to write byte %x: %w", b, err)
+	}
+	if n != len(b) {
+		return fmt.Errorf("expected to write %d bytes, wrote %d", len(b), n)
+	}
+	return nil
 }

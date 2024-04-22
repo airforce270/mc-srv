@@ -8,9 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 
-	"github.com/airforce270/mc-srv/flags"
+	"github.com/google/uuid"
 )
 
 const (
@@ -24,7 +23,7 @@ var (
 
 // Byte reads a single byte from the reader.
 func Byte(r io.Reader) (byte, error) {
-	b, err := read(r, 1)
+	b, err := Bytes(r, 1)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read byte: %w", err)
 	}
@@ -34,7 +33,7 @@ func Byte(r io.Reader) (byte, error) {
 
 // UnsignedShort reads an unsigned short from the reader.
 func UnsignedShort(r io.Reader) (uint16, error) {
-	b, err := read(r, 2)
+	b, err := Bytes(r, 2)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read bytes: %w", err)
 	}
@@ -44,7 +43,7 @@ func UnsignedShort(r io.Reader) (uint16, error) {
 
 // Long reads a long from the reader.
 func Long(r io.Reader) (int64, error) {
-	b, err := read(r, 8)
+	b, err := Bytes(r, 8)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read bytes: %w", err)
 	}
@@ -63,7 +62,7 @@ func String(r io.Reader) (string, error) {
 		return "", fmt.Errorf("failed to read string's length: %w", err)
 	}
 
-	bytes, err := read(r, int(length))
+	bytes, err := Bytes(r, int(length))
 	if err != nil {
 		return "", fmt.Errorf("failed to read string bytes: %w", err)
 	}
@@ -98,8 +97,31 @@ func VarInt(r io.Reader) (int32, error) {
 	}
 }
 
-// Read the specified number of bytes from the reader.
-func read(r io.Reader, count int) ([]byte, error) {
+// UUID reads a UUID from the reader.
+//
+// UUIDs are encoded as an unsigned 128-bit integer
+// (or two unsigned 64-bit integers: the most sig 64 bits
+// and then the least sig 64 bits)
+func UUID(r io.Reader) (uuid.UUID, error) {
+	bytes, err := Bytes(r, 16)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("failed to read bytes for UUID: %w", err)
+	}
+
+	u, err := uuid.FromBytes(bytes)
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("failed to create UUID from bytes: %w", err)
+	}
+
+	return u, nil
+}
+
+// Bytes reads the specified number of bytes from the reader.
+func Bytes(r io.Reader, count int) ([]byte, error) {
+	if count == 0 {
+		return nil, nil
+	}
+
 	buf := make([]byte, count)
 	readCount, err := r.Read(buf)
 	if err != nil {
@@ -109,8 +131,5 @@ func read(r io.Reader, count int) ([]byte, error) {
 		return nil, fmt.Errorf("expected to read %d bytes, read %d: %w", count, readCount, err)
 	}
 
-	if *flags.Verbose {
-		log.Printf("READ  %x (%d)", buf, readCount)
-	}
 	return buf, nil
 }

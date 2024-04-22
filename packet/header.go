@@ -3,7 +3,9 @@ package packet
 import (
 	"fmt"
 	"io"
+	"log"
 
+	"github.com/airforce270/mc-srv/flags"
 	"github.com/airforce270/mc-srv/read"
 	"github.com/airforce270/mc-srv/write"
 )
@@ -29,7 +31,7 @@ func (h Header) Write(w io.Writer) error {
 	return nil
 }
 
-func readHeader(r io.Reader) (Header, error) {
+func readHeader(r io.Reader, logger *log.Logger) (Header, error) {
 	var h Header
 	var err error
 
@@ -46,6 +48,10 @@ func readHeader(r io.Reader) (Header, error) {
 		return h, fmt.Errorf("failed to read packet id: %w", err)
 	}
 	h.PacketID = ID(packetID)
+
+	if *flags.Verbose {
+		logger.Printf("Received header: %+v", h)
+	}
 
 	return h, nil
 }

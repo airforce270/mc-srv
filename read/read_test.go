@@ -3,9 +3,12 @@ package read_test
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/airforce270/mc-srv/read"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 )
 
 func TestByte(t *testing.T) {
@@ -19,12 +22,10 @@ func TestByte(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
-			buf := bytes.NewBuffer([]byte{tc.input})
 
-			got, err := read.Byte(buf)
+			got, err := read.Byte(bytes.NewReader([]byte{tc.input}))
 			if err != nil {
 				t.Fatalf("Byte() unexpected error: %v", err)
 			}
@@ -47,12 +48,10 @@ func TestUnsignedShort(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%d", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
-			buf := bytes.NewBuffer(tc.input[:])
 
-			got, err := read.UnsignedShort(buf)
+			got, err := read.UnsignedShort(bytes.NewReader(tc.input[:]))
 			if err != nil {
 				t.Fatalf("UnsignedShort() unexpected error: %v", err)
 			}
@@ -76,12 +75,10 @@ func TestLong(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%d", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
-			buf := bytes.NewBuffer(tc.input[:])
 
-			got, err := read.Long(buf)
+			got, err := read.Long(bytes.NewReader(tc.input[:]))
 			if err != nil {
 				t.Fatalf("Long() unexpected error: %v", err)
 			}
@@ -103,16 +100,14 @@ func TestString(t *testing.T) {
 	}{
 		{[]byte{0x00}, ""},
 		{[]byte{0x02, 'h', 'i'}, "hi"},
-		{append([]byte{0x80, 0x01}, []byte(strWithLen128)...), strWithLen128},
+		{slices.Concat([]byte{0x80, 0x01}, []byte(strWithLen128)), strWithLen128},
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%s", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
-			buf := bytes.NewBuffer(tc.input[:])
 
-			got, err := read.String(buf)
+			got, err := read.String(bytes.NewReader(tc.input))
 			if err != nil {
 				t.Fatalf("String() unexpected error: %v", err)
 			}
@@ -145,17 +140,70 @@ func TestVarInt(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%d", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
-			buf := bytes.NewBuffer(tc.input[:])
 
-			got, err := read.VarInt(buf)
+			got, err := read.VarInt(bytes.NewReader(tc.input))
 			if err != nil {
 				t.Fatalf("VarInt() unexpected error: %v", err)
 			}
 			if got != tc.want {
 				t.Errorf("VarInt() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUUID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input []byte
+		want  uuid.UUID
+	}{
+		{
+			input: []byte{
+				0x89, 0x96, 0xcb, 0x86, 0xcb, 0x63, 0x4c, 0x2d,
+				0x8b, 0x45, 0x7c, 0xdf, 0xd7, 0xb5, 0x42, 0xc8,
+			},
+			want: uuid.MustParse("8996cb86-cb63-4c2d-8b45-7cdfd7b542c8"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%d", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := read.UUID(bytes.NewReader(tc.input))
+			if err != nil {
+				t.Fatalf("UUID() unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("UUID() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBytes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input []byte
+		want  []byte
+	}{
+		{[]byte{0x00}, []byte{0x00}},
+		{[]byte{0x11, 0x12, 0x13}, []byte{0x11, 0x12, 0x13}},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := read.Bytes(bytes.NewReader(tc.input), len(tc.input))
+			if err != nil {
+				t.Fatalf("Bytes() unexpected error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Bytes() diff (-want, +got):\n%s", diff)
 			}
 		})
 	}

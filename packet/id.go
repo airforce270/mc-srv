@@ -1,7 +1,6 @@
 package packet
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/airforce270/mc-srv/write"
@@ -16,7 +15,7 @@ func (i ID) Len() int {
 	if ok {
 		return length
 	}
-	length = mustCalcIDLength(i)
+	length = write.VarIntLen(int32(i))
 	idLengthCacheMtx.Lock()
 	idLengthCache[i] = length
 	idLengthCacheMtx.Unlock()
@@ -28,23 +27,21 @@ const (
 	HandshakeID     ID = 0x00
 	StatusRequestID ID = 0x00
 	PingRequestID   ID = 0x01
+
+	LoginStartID         ID = 0x00
+	EncryptionResponseID ID = 0x01
 )
 
 // Response (Server->Client) packet IDs.
 const (
 	StatusResponseID ID = 0x00
 	PingResponseID   ID = 0x01
+
+	EncryptionRequestID ID = 0x01
+	LoginSuccessID      ID = 0x02
 )
 
 var (
 	idLengthCache    = map[ID]int{}
 	idLengthCacheMtx sync.Mutex
 )
-
-func mustCalcIDLength(id ID) int {
-	length, err := write.VarIntLen(int32(id))
-	if err != nil {
-		panic(fmt.Sprintf("Failed to calculate id len (%d): %v", id, err))
-	}
-	return length
-}

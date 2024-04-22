@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 
+	"github.com/airforce270/mc-srv/server/serverstate"
 	"github.com/airforce270/mc-srv/write"
 )
 
@@ -19,8 +20,8 @@ type Packet interface {
 }
 
 // Read reads the next packet from the reader.
-func Read(r io.Reader) (Packet, error) {
-	h, err := readHeader(r)
+func Read(r io.Reader, state serverstate.State, logger *log.Logger) (Packet, error) {
+	h, err := readHeader(r, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
@@ -28,10 +29,7 @@ func Read(r io.Reader) (Packet, error) {
 		return nil, nil
 	}
 
-	packetIDLen, err := write.VarIntLen(int32(h.PacketID))
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate serialized packet id len (%d): %w", h.PacketID, err)
-	}
+	packetIDLen := write.VarIntLen(int32(h.PacketID))
 
 	fieldsLength := int(h.Length) - packetIDLen
 	if fieldsLength == 0 {
@@ -51,13 +49,29 @@ func Read(r io.Reader) (Packet, error) {
 	}
 
 	var p Packet
-	switch h.PacketID {
-	case HandshakeID:
-		p, err = ReadHandshake(&buf, h)
-	case PingRequestID:
-		p, err = ReadPing(&buf, h)
+	switch state {
+	case serverstate.PreHandshake, serverstate.ClientRequestingStatus:
+		switch h.PacketID {
+		case HandshakeID:
+			p, err = ReadHandshake(&buf, h)
+		case PingRequestID:
+			p, err = ReadPingRequest(&buf, h)
+		default:
+			log.Printf("Unhandled packet type (state=%v): %x", state, h.PacketID)
+			return nil, nil
+		}
+	case serverstate.ClientRequestingLogin:
+		switch h.PacketID {
+		case LoginStartID:
+			p, err = ReadLoginStart(&buf, h)
+		}
+	case serverstate.EncryptionRequested:
+		switch h.PacketID {
+		case EncryptionResponseID:
+			p, err = ReadEncryptionResponse(&buf, h)
+		}
 	default:
-		log.Printf("Unhandled packet type: %x", h.PacketID)
+		log.Printf("Unhandled packet type (state=%v): %x", state, h.PacketID)
 		return nil, nil
 	}
 	if err != nil {

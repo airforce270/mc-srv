@@ -47,10 +47,8 @@ type textComponent struct {
 	Text string `json:"text"`
 }
 
-// WriteStatusResponse writes a StatusResponse to the writer.
-// https://wiki.vg/Server_List_Ping#Status_Response
-func WriteStatusResponse(w io.Writer, protocol int) error {
-	sr, err := json.Marshal(statusResponseJSON{
+func NewStatusResponse(protocol int) (StatusResponse, error) {
+	resp, err := json.Marshal(statusResponseJSON{
 		Version: statusResponseVersion{
 			Name:     version,
 			Protocol: protocol,
@@ -68,11 +66,27 @@ func WriteStatusResponse(w io.Writer, protocol int) error {
 		PreviewsChat:       false,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal status response as JSON: %w", err)
+		return StatusResponse{}, fmt.Errorf("failed to marshal status response as JSON: %w", err)
 	}
 
+	return StatusResponse{JSONResponse: string(resp)}, nil
+}
+
+// StatusResponse is the information the server sends
+// to populate the server entry on the client.
+//
+// https://wiki.vg/Server_List_Ping#Status_Response
+type StatusResponse struct {
+	// JSON object with a specific format, as detailed in:
+	// https://wiki.vg/Server_List_Ping#Status_Response
+	JSONResponse string
+}
+
+// Write writes the StatusResponse to the writer.
+// https://wiki.vg/Server_List_Ping#Status_Response
+func (sr StatusResponse) Write(w io.Writer) error {
 	var buf bytes.Buffer
-	if err := write.String(&buf, string(sr)); err != nil {
+	if err := write.String(&buf, sr.JSONResponse); err != nil {
 		return fmt.Errorf("failed to write status response JSON: %w", err)
 	}
 

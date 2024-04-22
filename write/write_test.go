@@ -7,7 +7,34 @@ import (
 
 	"github.com/airforce270/mc-srv/write"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 )
+
+func TestBool(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input bool
+		want  []byte
+	}{
+		{true, []byte{0x01}},
+		{false, []byte{0x00}},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%t->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.Bool(&buf, tc.input); err != nil {
+				t.Fatalf("Bool() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Bool() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
 
 func TestByte(t *testing.T) {
 	t.Parallel()
@@ -20,7 +47,6 @@ func TestByte(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
@@ -30,7 +56,7 @@ func TestByte(t *testing.T) {
 			}
 			got := buf.Bytes()
 			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("Bytes() diff (-want, +got):\n%s", diff)
+				t.Errorf("Byte() diff (-want, +got):\n%s", diff)
 			}
 		})
 	}
@@ -49,7 +75,6 @@ func TestLong(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
@@ -80,7 +105,6 @@ func TestString(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%s->%x", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
@@ -116,7 +140,6 @@ func TestVarInt(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(fmt.Sprintf("%d->%x", tc.input, tc.want), func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
@@ -127,6 +150,92 @@ func TestVarInt(t *testing.T) {
 			got := buf.Bytes()
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("VarInt() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestVarIntLen(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input int32
+		want  int
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 1},
+		{127, 1},
+		{128, 2},
+		{255, 2},
+		{25565, 3},
+		{2097151, 3},
+		{2147483647, 5},
+		{-1, 5},
+		{-2147483648, 5},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%d->%d", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			if got := write.VarIntLen(tc.input); got != tc.want {
+				t.Errorf("VarIntLen() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUUID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input uuid.UUID
+		want  []byte
+	}{
+		{
+			input: uuid.MustParse("8996cb86-cb63-4c2d-8b45-7cdfd7b542c8"),
+			want: []byte{
+				0x89, 0x96, 0xcb, 0x86, 0xcb, 0x63, 0x4c, 0x2d,
+				0x8b, 0x45, 0x7c, 0xdf, 0xd7, 0xb5, 0x42, 0xc8,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.UUID(&buf, tc.input); err != nil {
+				t.Fatalf("UUID() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("UUID() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestBytes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input []byte
+		want  []byte
+	}{
+		{[]byte{0x00}, []byte{0x00}},
+		{[]byte{0x11, 0x12, 0x13}, []byte{0x11, 0x12, 0x13}},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.Bytes(&buf, tc.input); err != nil {
+				t.Fatalf("Bytes() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Bytes() diff (-want, +got):\n%s", diff)
 			}
 		})
 	}

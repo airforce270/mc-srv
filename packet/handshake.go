@@ -7,6 +7,11 @@ import (
 	"github.com/airforce270/mc-srv/read"
 )
 
+const (
+	HandshakeNextStateStatus = 1
+	HandshakeNextStateLogin  = 2
+)
+
 // Initial packet sent from the client server to establish connection.
 type Handshake struct {
 	Header
@@ -23,7 +28,7 @@ type Handshake struct {
 	NextState int32
 }
 
-func (h Handshake) Name() string { return "Handshake" }
+func (Handshake) Name() string { return "Handshake" }
 
 // ReadHandshake reads a handshake packet from the reader.
 // https://wiki.vg/Server_List_Ping#Handshake
