@@ -87,6 +87,33 @@ func TestUnsignedShort(t *testing.T) {
 	}
 }
 
+func TestInt(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input [4]byte
+		want  int32
+	}{
+		{[4]byte{0x0, 0x0, 0x0, 0x0}, 0},
+		{[4]byte{0x0, 0x0, 0x04, 0xd2}, 1234},
+		{[4]byte{0xff, 0xff, 0xff, 0xff}, -1},
+		{[4]byte{0xf8, 0xa4, 0x32, 0xeb}, -123456789},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%d", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := read.Int(bytes.NewReader(tc.input[:]))
+			if err != nil {
+				t.Fatalf("Int() unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("Int() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLong(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
