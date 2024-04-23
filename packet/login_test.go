@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/airforce270/mc-srv/packet"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/packet/logintest"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -16,7 +17,7 @@ func TestReadLoginStart(t *testing.T) {
 
 	inHeader := packet.Header{
 		Length:   25,
-		PacketID: packet.LoginStartID,
+		PacketID: id.LoginStart,
 	}
 
 	tests := []struct {
@@ -112,7 +113,7 @@ func TestReadEncryptionResponse(t *testing.T) {
 
 	inHeader := packet.Header{
 		Length:   11,
-		PacketID: packet.EncryptionResponseID,
+		PacketID: id.EncryptionResponse,
 	}
 
 	tests := []struct {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/read"
 	"github.com/airforce270/mc-srv/write"
 	"github.com/google/uuid"
@@ -79,7 +80,7 @@ func (r EncryptionRequest) Write(w io.Writer) error {
 		return fmt.Errorf("failed to write verify token: %w", err)
 	}
 
-	if err := writePacket(w, EncryptionRequestID, &buf); err != nil {
+	if err := writePacket(w, id.EncryptionRequest, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 
@@ -190,8 +191,15 @@ func (s LoginSuccess) Write(w io.Writer, logger *log.Logger) error {
 		}
 	}
 
-	if err := writePacket(w, LoginSuccessID, &buf); err != nil {
+	if err := writePacket(w, id.LoginSuccess, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 	return nil
 }
+
+// Packet sent by the client to acknowledge login success..
+type LoginAcknowledgement struct {
+	Header
+}
+
+func (LoginAcknowledgement) Name() string { return "LoginAcknowledgement" }

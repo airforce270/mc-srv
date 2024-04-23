@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/airforce270/mc-srv/packet"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/packet/pingtest"
 	"github.com/google/go-cmp/cmp"
 )
@@ -14,7 +15,7 @@ func TestReadPing(t *testing.T) {
 
 	inHeader := packet.Header{
 		Length:   9,
-		PacketID: packet.PingRequestID,
+		PacketID: id.HandshakePing,
 	}
 
 	tests := []struct {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/handshaketest"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -14,7 +15,7 @@ func TestReadHandshake(t *testing.T) {
 
 	inHeader := packet.Header{
 		Length:   16,
-		PacketID: packet.HandshakeID,
+		PacketID: id.Handshake,
 	}
 
 	tests := []struct {

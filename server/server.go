@@ -24,6 +24,11 @@ import (
 
 const serverID = ""
 
+// errEnableEncryption is not an error per se,
+// but indicates to the caller that encryption should be used
+// for all future reads and writes.
+var errEnableEncryption = errors.New("enable encryption")
+
 type Conn struct {
 	state serverstate.State
 
@@ -45,11 +50,22 @@ func NewConn() (*Conn, error) {
 	}, nil
 }
 
+func newLoggingReader(r io.Reader, logger *log.Logger) *bufio.Reader {
+	return bufio.NewReader(io.TeeReader(r, readLogger{log: logger}))
+}
+
+func newLoggingWriter(w io.Writer, logger *log.Logger) *bufio.Writer {
+	return bufio.NewWriter(io.MultiWriter(w, writeLogger{log: logger}))
+}
+
 // handleConn handles a new connection.
 func (c *Conn) Handle(conn net.Conn) {
 	logger := log.New(os.Stderr, fmt.Sprintf("[%s] ", conn.RemoteAddr().String()), log.Flags()|log.Lmsgprefix)
-	r := bufio.NewReader(io.TeeReader(conn, readLogger{log: logger}))
-	w := bufio.NewWriter(io.MultiWriter(conn, writeLogger{log: logger}))
+	br := newLoggingReader(conn, logger)
+	bw := newLoggingWriter(conn, logger)
+
+	var r io.Reader = br
+	var w io.Writer = bw
 
 	defer conn.Close()
 	for {
@@ -58,11 +74,28 @@ func (c *Conn) Handle(conn net.Conn) {
 			if errors.Is(err, crypto.ErrCloseConn) {
 				logger.Printf("Failed to handle packet, closing conn: %v", err)
 				break
+			} else if errors.Is(err, errEnableEncryption) {
+				logger.Printf("Enabling encryption for read stream...")
+				if cr, err := crypto.NewDecryptReader(conn, c.sharedSecret); err == nil {
+					r = newLoggingReader(cr, logger)
+					logger.Printf("Enabled encryption for read stream.")
+				} else {
+					logger.Printf("Failed to enable encryption for read stream: %v", err)
+				}
+
+				logger.Printf("Enabling encryption for write stream...")
+				if cw, err := crypto.NewEncryptWriter(w, c.sharedSecret); err == nil {
+					w = newLoggingWriter(cw, logger)
+					logger.Printf("Enabled encryption for write stream.")
+				} else {
+					logger.Printf("Failed to enable encryption for write stream: %v", err)
+				}
+
 			} else {
 				logger.Printf("Failed to handle packet: %v", err)
 			}
 		}
-		if err := w.Flush(); err != nil {
+		if err := bw.Flush(); err != nil {
 			logger.Printf("Flushing conn write buffer failed: %v", err)
 		}
 	}
@@ -181,12 +214,17 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 			return fmt.Errorf("failed to create encrypter: %w", err)
 		}
 
+		logger.Print("Warning: next logged write is the encrypted bytes, not the raw bytes.")
+
 		if err := ls.Write(cw, logger); err != nil {
 			return fmt.Errorf("failed to write login success: %w", err)
 		} else {
 			logger.Print("Wrote login success")
-			c.state = serverstate.LoginComplete
+			c.state = serverstate.LoginCompletePendingAcknowledgement
+			return errEnableEncryption
 		}
+	case packet.LoginAcknowledgement:
+		c.state = serverstate.LoginComplete
 	}
 
 	return nil

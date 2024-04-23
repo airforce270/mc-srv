@@ -3,9 +3,8 @@ package packet
 import (
 	"fmt"
 	"io"
-	"log"
 
-	"github.com/airforce270/mc-srv/flags"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/read"
 	"github.com/airforce270/mc-srv/write"
 )
@@ -15,11 +14,11 @@ type Header struct {
 	// Length is the length of the PacketID and following data in the packet.
 	Length int32
 	// PacketID is the ID of the packet.
-	PacketID ID
+	PacketID id.ID
 }
 
 // ID returns the packet ID of the header.
-func (h Header) ID() ID { return h.PacketID }
+func (h Header) ID() id.ID { return h.PacketID }
 
 func (h Header) Write(w io.Writer) error {
 	if err := write.VarInt(w, h.Length); err != nil {
@@ -31,7 +30,7 @@ func (h Header) Write(w io.Writer) error {
 	return nil
 }
 
-func readHeader(r io.Reader, logger *log.Logger) (Header, error) {
+func readHeader(r io.Reader) (Header, error) {
 	var h Header
 	var err error
 
@@ -47,11 +46,7 @@ func readHeader(r io.Reader, logger *log.Logger) (Header, error) {
 	if err != nil {
 		return h, fmt.Errorf("failed to read packet id: %w", err)
 	}
-	h.PacketID = ID(packetID)
-
-	if *flags.Verbose {
-		logger.Printf("Received header: %+v", h)
-	}
+	h.PacketID = id.ID(packetID)
 
 	return h, nil
 }

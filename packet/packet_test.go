@@ -9,6 +9,7 @@ import (
 
 	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/handshaketest"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/packet/logintest"
 	"github.com/airforce270/mc-srv/packet/pingtest"
 	"github.com/airforce270/mc-srv/server/serverstate"
@@ -30,7 +31,7 @@ func TestRead(t *testing.T) {
 			want: packet.Handshake{
 				Header: packet.Header{
 					Length:   16,
-					PacketID: packet.HandshakeID,
+					PacketID: id.Handshake,
 				},
 				ProtocolVersion: 765,
 				ServerAddress:   "127.0.0.1",
@@ -45,7 +46,7 @@ func TestRead(t *testing.T) {
 			want: packet.Handshake{
 				Header: packet.Header{
 					Length:   16,
-					PacketID: packet.HandshakeID,
+					PacketID: id.Handshake,
 				},
 				ProtocolVersion: 765,
 				ServerAddress:   "127.0.0.1",
@@ -59,7 +60,7 @@ func TestRead(t *testing.T) {
 			want: packet.PingRequest{
 				Header: packet.Header{
 					Length:   9,
-					PacketID: packet.PingRequestID,
+					PacketID: id.HandshakePing,
 				},
 				Payload: 6837160,
 			},
@@ -70,7 +71,7 @@ func TestRead(t *testing.T) {
 			want: packet.PingRequest{
 				Header: packet.Header{
 					Length:   9,
-					PacketID: packet.PingRequestID,
+					PacketID: id.HandshakePing,
 				},
 				Payload: 6837160,
 			},
@@ -81,7 +82,7 @@ func TestRead(t *testing.T) {
 			want: packet.LoginStart{
 				Header: packet.Header{
 					Length:   25,
-					PacketID: packet.LoginStartID,
+					PacketID: id.LoginStart,
 				},
 				PlayerName: "airfors",
 				PlayerUUID: uuid.MustParse("8996cb86-cb63-4c2d-8b45-7cdfd7b542c8"),

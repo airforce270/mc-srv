@@ -10,5 +10,6 @@ const (
 	EncryptionRequested
 	LoginSucceededPendingConfirmation
 	LoginSucceeded
+	LoginCompletePendingAcknowledgement
 	LoginComplete
 )

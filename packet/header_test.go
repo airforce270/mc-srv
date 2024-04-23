@@ -2,10 +2,10 @@ package packet
 
 import (
 	"bytes"
-	"log"
 	"testing"
 
 	"github.com/airforce270/mc-srv/packet/headertest"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -22,7 +22,7 @@ func TestReadHeader(t *testing.T) {
 			input: headertest.HandshakeLen16,
 			want: Header{
 				Length:   16,
-				PacketID: HandshakeID,
+				PacketID: id.Handshake,
 			},
 		},
 		{
@@ -30,7 +30,7 @@ func TestReadHeader(t *testing.T) {
 			input: headertest.PingLen9,
 			want: Header{
 				Length:   9,
-				PacketID: PingRequestID,
+				PacketID: id.HandshakePing,
 			},
 		},
 	}
@@ -39,7 +39,7 @@ func TestReadHeader(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := readHeader(bytes.NewReader(tc.input), log.Default())
+			got, err := readHeader(bytes.NewReader(tc.input))
 			if err != nil {
 				t.Fatalf("readHeader() unexpected err: %v", err)
 			}

@@ -7,6 +7,8 @@ import (
 	"io"
 	"log"
 
+	"github.com/airforce270/mc-srv/flags"
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/server/serverstate"
 	"github.com/airforce270/mc-srv/write"
 )
@@ -14,29 +16,29 @@ import (
 // Packet is a packet in the Minecraft client-server protocol.
 type Packet interface {
 	// ID returns the ID of the packet.
-	ID() ID
+	ID() id.ID
 	// Name returns the human-readable display name of the packet.
 	Name() string
 }
 
 // Read reads the next packet from the reader.
 func Read(r io.Reader, state serverstate.State, logger *log.Logger) (Packet, error) {
-	h, err := readHeader(r, logger)
+	h, err := readHeader(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
 	if h.Length == 0 {
 		return nil, nil
 	}
+	if *flags.Verbose {
+		logger.Printf("Received header {id=0x%x length=%d}", h.PacketID, h.Length)
+	}
 
 	packetIDLen := write.VarIntLen(int32(h.PacketID))
 
 	fieldsLength := int(h.Length) - packetIDLen
-	if fieldsLength == 0 {
-		if h.PacketID == StatusRequestID {
-			return StatusRequest{Header: h}, nil
-		}
-		return nil, nil
+	if fieldsLength == 0 && h.PacketID == id.StatusRequest {
+		return StatusRequest{Header: h}, nil
 	}
 
 	var buf bytes.Buffer
@@ -52,26 +54,46 @@ func Read(r io.Reader, state serverstate.State, logger *log.Logger) (Packet, err
 	switch state {
 	case serverstate.PreHandshake, serverstate.ClientRequestingStatus:
 		switch h.PacketID {
-		case HandshakeID:
+		case id.Handshake:
 			p, err = ReadHandshake(&buf, h)
-		case PingRequestID:
+		case id.HandshakePing:
 			p, err = ReadPingRequest(&buf, h)
 		default:
-			log.Printf("Unhandled packet type (state=%v): %x", state, h.PacketID)
+			logger.Printf("Unhandled packet type (state=%v): %x", state, h.PacketID)
 			return nil, nil
 		}
 	case serverstate.ClientRequestingLogin:
 		switch h.PacketID {
-		case LoginStartID:
+		case id.LoginStart:
 			p, err = ReadLoginStart(&buf, h)
 		}
 	case serverstate.EncryptionRequested:
 		switch h.PacketID {
-		case EncryptionResponseID:
+		case id.EncryptionResponse:
 			p, err = ReadEncryptionResponse(&buf, h)
 		}
+	case serverstate.LoginCompletePendingAcknowledgement:
+		switch h.PacketID {
+		case id.LoginAcknowledgement:
+			p = LoginAcknowledgement{Header: h}
+		}
+	case serverstate.LoginComplete:
+		switch h.PacketID {
+		case id.ClientInformation:
+			p, err = ReadConfigClientInformation(&buf, h)
+		case id.ServerboundPlugin:
+			p, err = ReadConfigServerboundPlugin(&buf, h)
+		case id.AcknowledgeFinish:
+			p = AcknowledgeFinishConfiguration{Header: h}
+		case id.ServerboundKeepAlive:
+			p, err = ReadServerboundKeepAlive(&buf, h)
+		case id.Pong:
+			p, err = ReadConfigPong(&buf, h)
+		case id.ResourcePackResponse:
+			p, err = ReadConfigResourcePackResponse(&buf, h)
+		}
 	default:
-		log.Printf("Unhandled packet type (state=%v): %x", state, h.PacketID)
+		logger.Printf("Unhandled packet type (state=%v): %x", state, h.PacketID)
 		return nil, nil
 	}
 	if err != nil {
@@ -89,7 +111,7 @@ type readLengther interface {
 }
 
 // writePacket writes a packet to the writer.
-func writePacket(w io.Writer, id ID, payload readLengther) error {
+func writePacket(w io.Writer, id id.ID, payload readLengther) error {
 	payloadLen := payload.Len()
 	h := Header{
 		Length:   int32(id.Len() + payloadLen),

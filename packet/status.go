@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/write"
 )
 
@@ -90,7 +91,7 @@ func (sr StatusResponse) Write(w io.Writer) error {
 		return fmt.Errorf("failed to write status response JSON: %w", err)
 	}
 
-	if err := writePacket(w, StatusResponseID, &buf); err != nil {
+	if err := writePacket(w, id.StatusResponse, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 

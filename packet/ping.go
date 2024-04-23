@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/read"
 	"github.com/airforce270/mc-srv/write"
 )
@@ -47,7 +48,7 @@ func (pr PingResponse) Write(w io.Writer) error {
 		return fmt.Errorf("failed to write ping response payload: %w", err)
 	}
 
-	if err := writePacket(w, PingResponseID, &buf); err != nil {
+	if err := writePacket(w, id.HandshakePong, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 

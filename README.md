@@ -19,7 +19,7 @@ A simple Minecraft server to play around with the protocol.
 - [x] Send encryption request packet
 - [x] Handle encryption response packet
 - [x] Send login success packet
-- [ ] Handle login acknowledged packet
+- [x] Handle login acknowledged packet
 
 ### Configuration
 

@@ -21,6 +21,15 @@ var (
 	errVarIntTooBig = errors.New("varint is too big")
 )
 
+// Bool reads a bool from the reader.
+func Bool(r io.Reader) (bool, error) {
+	b, err := Byte(r)
+	if err != nil {
+		return false, fmt.Errorf("failed to read bool: %w", err)
+	}
+	return b == 0x01, nil
+}
+
 // Byte reads a single byte from the reader.
 func Byte(r io.Reader) (byte, error) {
 	b, err := Bytes(r, 1)
@@ -39,6 +48,20 @@ func UnsignedShort(r io.Reader) (uint16, error) {
 	}
 
 	return 0 | (uint16(b[0]) << 8) | uint16(b[1]), nil
+}
+
+// Int reads a int from the reader.
+func Int(r io.Reader) (int32, error) {
+	b, err := Bytes(r, 4)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read bytes: %w", err)
+	}
+
+	var val int32
+	if err := binary.Read(bytes.NewReader(b), binary.BigEndian, &val); err != nil {
+		return 0, fmt.Errorf("failed to read int32: %w", err)
+	}
+	return val, nil
 }
 
 // Long reads a long from the reader.

@@ -11,6 +11,31 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestBool(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input byte
+		want  bool
+	}{
+		{0x00, false},
+		{0x01, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%t", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := read.Bool(bytes.NewReader([]byte{tc.input}))
+			if err != nil {
+				t.Fatalf("Bool() unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("Bool() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestByte(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
