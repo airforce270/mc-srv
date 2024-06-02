@@ -62,6 +62,34 @@ func TestByte(t *testing.T) {
 	}
 }
 
+func TestInt(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input int32
+		want  []byte
+	}{
+		{0, []byte{0x0, 0x0, 0x0, 0x0}},
+		{1234, []byte{0x0, 0x0, 0x04, 0xd2}},
+		{-1, []byte{0xff, 0xff, 0xff, 0xff}},
+		{-123456789, []byte{0xf8, 0xa4, 0x32, 0xeb}},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%x->%x", tc.input, tc.want), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+
+			if err := write.Int(&buf, tc.input); err != nil {
+				t.Fatalf("Long() unexpected error: %v", err)
+			}
+			got := buf.Bytes()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Int() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestLong(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

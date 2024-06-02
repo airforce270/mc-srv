@@ -39,7 +39,7 @@ func TestReadHeader(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := readHeader(bytes.NewReader(tc.input))
+			got, err := ReadHeader(bytes.NewReader(tc.input))
 			if err != nil {
 				t.Fatalf("readHeader() unexpected err: %v", err)
 			}

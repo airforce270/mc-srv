@@ -1,4 +1,4 @@
-package packet_test
+package slp_test
 
 import (
 	"bytes"
@@ -7,10 +7,54 @@ import (
 	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/id"
 	"github.com/airforce270/mc-srv/packet/pingtest"
+	"github.com/airforce270/mc-srv/packet/slp"
+	"github.com/airforce270/mc-srv/packet/slp/slptest"
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestReadPing(t *testing.T) {
+func TestReadHandshake(t *testing.T) {
+	t.Parallel()
+
+	inHeader := packet.Header{
+		Length:   16,
+		PacketID: id.Handshake,
+	}
+
+	tests := []struct {
+		desc  string
+		input []byte
+		want  slp.Handshake
+	}{
+		{
+			desc:  "notchian example",
+			input: slptest.NotchianHandshake,
+			want: slp.Handshake{
+				Header:          inHeader,
+				ProtocolVersion: 765,
+				ServerAddress:   "127.0.0.1",
+				ServerPort:      25565,
+				NextState:       1,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := slp.ReadHandshake(bytes.NewReader(tc.input), inHeader)
+			if err != nil {
+				t.Fatalf("ReadHandshake() unexpected err: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("ReadHandshake() diff (-want, +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestReadHandshakePingRequest(t *testing.T) {
 	t.Parallel()
 
 	inHeader := packet.Header{
@@ -21,12 +65,12 @@ func TestReadPing(t *testing.T) {
 	tests := []struct {
 		desc  string
 		input []byte
-		want  packet.PingRequest
+		want  slp.HandshakePingRequest
 	}{
 		{
 			desc:  "notchian client example",
 			input: pingtest.Notchian,
-			want: packet.PingRequest{
+			want: slp.HandshakePingRequest{
 				Header:  inHeader,
 				Payload: 6837160,
 			},
@@ -37,7 +81,7 @@ func TestReadPing(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := packet.ReadPingRequest(bytes.NewReader(tc.input), inHeader)
+			got, err := slp.ReadHandshakePingRequest(bytes.NewReader(tc.input), inHeader)
 			if err != nil {
 				t.Fatalf("ReadPing() unexpected err: %v", err)
 			}
@@ -49,7 +93,7 @@ func TestReadPing(t *testing.T) {
 	}
 }
 
-func TestWritePingResponse(t *testing.T) {
+func TestWriteHandshakePingResponse(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -71,7 +115,7 @@ func TestWritePingResponse(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			pr := packet.PingResponse{Payload: tc.input}
+			pr := slp.HandshakePingResponse{Payload: tc.input}
 
 			var out bytes.Buffer
 

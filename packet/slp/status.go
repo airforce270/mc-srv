@@ -1,4 +1,4 @@
-package packet
+package slp
 
 import (
 	"bytes"
@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/id"
+	"github.com/airforce270/mc-srv/packet/writepacket"
 	"github.com/airforce270/mc-srv/write"
 )
 
@@ -18,7 +20,7 @@ const (
 // Zero-field packet that should be ignored.
 // https://wiki.vg/Server_List_Ping#Status_Request
 type StatusRequest struct {
-	Header
+	packet.Header
 }
 
 func (sr StatusRequest) Name() string { return "StatusRequest" }
@@ -91,7 +93,7 @@ func (sr StatusResponse) Write(w io.Writer) error {
 		return fmt.Errorf("failed to write status response JSON: %w", err)
 	}
 
-	if err := writePacket(w, id.StatusResponse, &buf); err != nil {
+	if err := writepacket.Write(w, id.StatusResponse, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 

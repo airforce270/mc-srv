@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 
 	"github.com/airforce270/mc-srv/server"
 )
@@ -32,12 +35,22 @@ func main() {
 	flag.Parse()
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 
+	ctx := context.Background()
+	ctx, _ = signal.NotifyContext(ctx, os.Interrupt)
+
 	listener, err := createListener(*portFlag)
 	if err != nil {
 		log.Fatalf("Failed to create listener: %v", err)
 	}
 	defer listener.Close()
 	log.Printf("Listening on port %d", *portFlag)
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	go func() {
+		<-interrupt
+		listener.Close()
+	}()
 
 	for {
 		conn, err := listener.AcceptTCP()
@@ -54,6 +67,7 @@ func main() {
 			conn.Close()
 			continue
 		}
-		go c.Handle(conn)
+		defer c.Close()
+		go c.Handle(ctx, conn)
 	}
 }

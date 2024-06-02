@@ -1,10 +1,15 @@
-package packet
+package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
+	"github.com/airforce270/mc-srv/packet"
+	"github.com/airforce270/mc-srv/packet/id"
+	"github.com/airforce270/mc-srv/packet/writepacket"
 	"github.com/airforce270/mc-srv/read"
+	"github.com/airforce270/mc-srv/write"
 	"github.com/google/uuid"
 )
 
@@ -27,7 +32,7 @@ const (
 
 // Packet sent from the client to convey its config.
 type ConfigClientInformation struct {
-	Header
+	packet.Header
 	// Player's locale, e.g. "en_GB".
 	Locale string
 	// Player's (client-side) view distance, in chunks.
@@ -71,7 +76,7 @@ func (ConfigClientInformation) Name() string { return "ClientInformation(config)
 // ReadConfigClientInformation reads a Client Information (config) packet
 // from the reader.
 // https://wiki.vg/Protocol#Client_Information_.28configuration.29
-func ReadConfigClientInformation(r io.Reader, header Header) (ConfigClientInformation, error) {
+func ReadConfigClientInformation(r io.Reader, header packet.Header) (ConfigClientInformation, error) {
 	p := ConfigClientInformation{Header: header}
 
 	var err error
@@ -123,7 +128,7 @@ func ReadConfigClientInformation(r io.Reader, header Header) (ConfigClientInform
 
 // Packet for mods and plugins to send data client->server.
 type ConfigServerboundPlugin struct {
-	Header
+	packet.Header
 	// Any data, depending on the channel.
 	// `minecraft:` channels are documented here: https://wiki.vg/Plugin_channel
 	Data []byte
@@ -134,7 +139,7 @@ func (ConfigServerboundPlugin) Name() string { return "ServerboundPlugin(config)
 // ReadConfigServerboundPlugin a Serverbound Plugin (config) packet
 // from the reader.
 // https://wiki.vg/Protocol#Serverbound_Plugin_.28configuration.29
-func ReadConfigServerboundPlugin(r io.Reader, header Header) (ConfigServerboundPlugin, error) {
+func ReadConfigServerboundPlugin(r io.Reader, header packet.Header) (ConfigServerboundPlugin, error) {
 	p := ConfigServerboundPlugin{Header: header}
 
 	var err error
@@ -153,14 +158,27 @@ func ReadConfigServerboundPlugin(r io.Reader, header Header) (ConfigServerboundP
 // the configuration process has finished.
 // Sent in response to FinishConfiguration.
 type AcknowledgeFinishConfiguration struct {
-	Header
+	packet.Header
 }
 
 func (AcknowledgeFinishConfiguration) Name() string { return "AcknowledgeFinishConfiguration" }
 
+// Server->client ping indicating the server is still alive.
+// If the client doesn't receive a keepalive at least every 20 seconds,
+// it will disconnect.
+// If a client doesn't respond to a keepalive within 15 seconds,
+// it should be disconnected.
+type ClientboundKeepAlive struct {
+	packet.Header
+	// Should be the same number that the server sent in its keep alive packet.
+	KeepAliveID int64
+}
+
+func (ClientboundKeepAlive) Name() string { return "ClientboundKeepAlive" }
+
 // Client->server response to the server->client keep alive packets.
 type ServerboundKeepAlive struct {
-	Header
+	packet.Header
 	// Should be the same number that the server sent in its keep alive packet.
 	KeepAliveID int64
 }
@@ -170,7 +188,7 @@ func (ServerboundKeepAlive) Name() string { return "ServerboundKeepAlive" }
 // ReadServerboundKeepAlive reads a Serverbound Keep Alive packet
 // from the reader.
 // https://wiki.vg/Protocol#Serverbound_Keep_Alive_.28configuration.29
-func ReadServerboundKeepAlive(r io.Reader, header Header) (ServerboundKeepAlive, error) {
+func ReadServerboundKeepAlive(r io.Reader, header packet.Header) (ServerboundKeepAlive, error) {
 	p := ServerboundKeepAlive{Header: header}
 
 	var err error
@@ -183,9 +201,33 @@ func ReadServerboundKeepAlive(r io.Reader, header Header) (ServerboundKeepAlive,
 	return p, nil
 }
 
+// Server->client ping that the client must respond to.
+type ConfigPing struct {
+	packet.Header
+	// The number the client should respond with.
+	PingID int32
+}
+
+func (ConfigPing) Name() string { return "Ping(config)" }
+
+// Write writes the ConfigPing to the writer.
+func (p *ConfigPing) Write(w io.Writer) error {
+	var buf bytes.Buffer
+
+	if err := write.Int(&buf, p.PingID); err != nil {
+		return fmt.Errorf("failed to write config ping ID: %w", err)
+	}
+
+	if err := writepacket.Write(w, id.Ping, &buf); err != nil {
+		return fmt.Errorf("failed to write config ping packet: %w", err)
+	}
+
+	return nil
+}
+
 // Client->server response to the server->client ping packets.
 type ConfigPong struct {
-	Header
+	packet.Header
 	// Should be the same number that the server sent in its ping packet.
 	PingID int32
 }
@@ -194,7 +236,7 @@ func (ConfigPong) Name() string { return "Pong(config)" }
 
 // ReadConfigPong reads a Pong (config) packet from the reader.
 // https://wiki.vg/Protocol#Pong_.28configuration.29
-func ReadConfigPong(r io.Reader, header Header) (ConfigPong, error) {
+func ReadConfigPong(r io.Reader, header packet.Header) (ConfigPong, error) {
 	p := ConfigPong{Header: header}
 
 	var err error
@@ -223,7 +265,7 @@ const (
 
 // Resource pack information client->server (?)
 type ConfigResourcePackResponse struct {
-	Header
+	packet.Header
 	// The unique identifier of the resource pack
 	// received in ConfigAddResourcePack.
 	ResourcePackUUID uuid.UUID
@@ -236,7 +278,7 @@ func (ConfigResourcePackResponse) Name() string { return "ResourcePackResponse(c
 // ReadConfigResourcePackResponse a Resource Pack Response (config) packet
 // from the reader.
 // https://wiki.vg/Protocol#Resource_Pack_Response_.28configuration.29
-func ReadConfigResourcePackResponse(r io.Reader, header Header) (ConfigResourcePackResponse, error) {
+func ReadConfigResourcePackResponse(r io.Reader, header packet.Header) (ConfigResourcePackResponse, error) {
 	p := ConfigResourcePackResponse{Header: header}
 
 	var err error
@@ -248,7 +290,7 @@ func ReadConfigResourcePackResponse(r io.Reader, header Header) (ConfigResourceP
 
 	result, err := read.VarInt(r)
 	if err != nil {
-		return p, fmt.Errorf("failed to read resource pack uuid: %w", err)
+		return p, fmt.Errorf("failed to read resource pack result: %w", err)
 	}
 	p.Result = ResourcePackResult(result)
 

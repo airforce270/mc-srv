@@ -12,4 +12,6 @@ const (
 	LoginSucceeded
 	LoginCompletePendingAcknowledgement
 	LoginComplete
+	ConfigurationCompletePendingAcknowledgement
+	ConfigurationComplete
 )

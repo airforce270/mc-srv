@@ -1,4 +1,4 @@
-package packet_test
+package readpacket_test
 
 import (
 	"bytes"
@@ -8,10 +8,13 @@ import (
 	"testing"
 
 	"github.com/airforce270/mc-srv/packet"
-	"github.com/airforce270/mc-srv/packet/handshaketest"
 	"github.com/airforce270/mc-srv/packet/id"
-	"github.com/airforce270/mc-srv/packet/logintest"
+	"github.com/airforce270/mc-srv/packet/login"
+	"github.com/airforce270/mc-srv/packet/login/logintest"
 	"github.com/airforce270/mc-srv/packet/pingtest"
+	"github.com/airforce270/mc-srv/packet/readpacket"
+	"github.com/airforce270/mc-srv/packet/slp"
+	"github.com/airforce270/mc-srv/packet/slp/slptest"
 	"github.com/airforce270/mc-srv/server/serverstate"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -27,8 +30,8 @@ func TestRead(t *testing.T) {
 	}{
 		{
 			state: serverstate.PreHandshake,
-			input: slices.Concat(handshaketest.NotchianHeader, handshaketest.Notchian),
-			want: packet.Handshake{
+			input: slices.Concat(slptest.NotchianHandshakeHeader, slptest.NotchianHandshake),
+			want: slp.Handshake{
 				Header: packet.Header{
 					Length:   16,
 					PacketID: id.Handshake,
@@ -42,8 +45,8 @@ func TestRead(t *testing.T) {
 
 		{
 			state: serverstate.ClientRequestingStatus,
-			input: slices.Concat(handshaketest.NotchianHeader, handshaketest.Notchian),
-			want: packet.Handshake{
+			input: slices.Concat(slptest.NotchianHandshakeHeader, slptest.NotchianHandshake),
+			want: slp.Handshake{
 				Header: packet.Header{
 					Length:   16,
 					PacketID: id.Handshake,
@@ -57,7 +60,7 @@ func TestRead(t *testing.T) {
 		{
 			state: serverstate.PreHandshake,
 			input: slices.Concat(pingtest.NotchianHeader, pingtest.Notchian),
-			want: packet.PingRequest{
+			want: slp.HandshakePingRequest{
 				Header: packet.Header{
 					Length:   9,
 					PacketID: id.HandshakePing,
@@ -68,7 +71,7 @@ func TestRead(t *testing.T) {
 		{
 			state: serverstate.ClientRequestingStatus,
 			input: slices.Concat(pingtest.NotchianHeader, pingtest.Notchian),
-			want: packet.PingRequest{
+			want: slp.HandshakePingRequest{
 				Header: packet.Header{
 					Length:   9,
 					PacketID: id.HandshakePing,
@@ -79,7 +82,7 @@ func TestRead(t *testing.T) {
 		{
 			state: serverstate.ClientRequestingLogin,
 			input: slices.Concat(logintest.NotchianLoginStartHeader, logintest.NotchianLoginStart),
-			want: packet.LoginStart{
+			want: login.LoginStart{
 				Header: packet.Header{
 					Length:   25,
 					PacketID: id.LoginStart,
@@ -94,7 +97,7 @@ func TestRead(t *testing.T) {
 		t.Run(fmt.Sprintf("[%d]%T", tc.state, tc.want), func(t *testing.T) {
 			t.Parallel()
 
-			got, err := packet.Read(bytes.NewReader(tc.input), tc.state, log.Default())
+			got, err := readpacket.Read(bytes.NewReader(tc.input), tc.state, log.Default())
 			if err != nil {
 				t.Fatalf("Read() unexpected err: %v", err)
 			}

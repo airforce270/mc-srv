@@ -1,4 +1,4 @@
-package packet
+package login
 
 import (
 	"bytes"
@@ -6,7 +6,9 @@ import (
 	"io"
 	"log"
 
+	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/id"
+	"github.com/airforce270/mc-srv/packet/writepacket"
 	"github.com/airforce270/mc-srv/read"
 	"github.com/airforce270/mc-srv/write"
 	"github.com/google/uuid"
@@ -14,7 +16,7 @@ import (
 
 // Packet sent to initiate login.
 type LoginStart struct {
-	Header
+	packet.Header
 	// Player's username.
 	PlayerName string
 	// The UUID of the player logging in.
@@ -25,7 +27,7 @@ func (LoginStart) Name() string { return "LoginStart" }
 
 // ReadLoginStart reads a Login Start packet from the reader.
 // https://wiki.vg/Protocol#Login_Start
-func ReadLoginStart(r io.Reader, header Header) (LoginStart, error) {
+func ReadLoginStart(r io.Reader, header packet.Header) (LoginStart, error) {
 	p := LoginStart{Header: header}
 
 	var err error
@@ -80,7 +82,7 @@ func (r EncryptionRequest) Write(w io.Writer) error {
 		return fmt.Errorf("failed to write verify token: %w", err)
 	}
 
-	if err := writePacket(w, id.EncryptionRequest, &buf); err != nil {
+	if err := writepacket.Write(w, id.EncryptionRequest, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 
@@ -89,7 +91,7 @@ func (r EncryptionRequest) Write(w io.Writer) error {
 
 // Packet sent to complete encryption.
 type EncryptionResponse struct {
-	Header
+	packet.Header
 	// Length of Shared Secret.
 	SharedSecretLength int32
 	// Shared Secret value, encrypted with the server's public key.
@@ -105,7 +107,7 @@ func (EncryptionResponse) Name() string { return "EncryptionResponse" }
 
 // ReadEncryptionResponse reads an Encryption Response packet from the reader.
 // https://wiki.vg/Protocol#Encryption_Response
-func ReadEncryptionResponse(r io.Reader, header Header) (EncryptionResponse, error) {
+func ReadEncryptionResponse(r io.Reader, header packet.Header) (EncryptionResponse, error) {
 	p := EncryptionResponse{Header: header}
 
 	var err error
@@ -191,7 +193,7 @@ func (s LoginSuccess) Write(w io.Writer, logger *log.Logger) error {
 		}
 	}
 
-	if err := writePacket(w, id.LoginSuccess, &buf); err != nil {
+	if err := writepacket.Write(w, id.LoginSuccess, &buf); err != nil {
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 	return nil
@@ -199,7 +201,7 @@ func (s LoginSuccess) Write(w io.Writer, logger *log.Logger) error {
 
 // Packet sent by the client to acknowledge login success..
 type LoginAcknowledgement struct {
-	Header
+	packet.Header
 }
 
 func (LoginAcknowledgement) Name() string { return "LoginAcknowledgement" }

@@ -36,6 +36,15 @@ func Byte(w io.Writer, b byte) error {
 	return Bytes(w, []byte{b})
 }
 
+// Int writes an int to the given writer.
+func Int(w io.Writer, v int32) error {
+	if err := binary.Write(w, binary.BigEndian, v); err != nil {
+		return fmt.Errorf("failed to write int32 %d: %w", v, err)
+	}
+
+	return nil
+}
+
 // Long writes an int64 to the given writer.
 func Long(w io.Writer, v int64) error {
 	if err := binary.Write(w, binary.BigEndian, v); err != nil {

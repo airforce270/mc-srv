@@ -30,7 +30,7 @@ func (h Header) Write(w io.Writer) error {
 	return nil
 }
 
-func readHeader(r io.Reader) (Header, error) {
+func ReadHeader(r io.Reader) (Header, error) {
 	var h Header
 	var err error
 

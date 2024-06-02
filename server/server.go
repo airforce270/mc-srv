@@ -4,6 +4,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
@@ -12,22 +13,36 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/airforce270/mc-srv/crypto"
-	"github.com/airforce270/mc-srv/packet"
+	"github.com/airforce270/mc-srv/packet/config"
+	"github.com/airforce270/mc-srv/packet/login"
+	"github.com/airforce270/mc-srv/packet/readpacket"
+	"github.com/airforce270/mc-srv/packet/slp"
+	"github.com/airforce270/mc-srv/server/keepaliver"
+	"github.com/airforce270/mc-srv/server/pinger"
 	"github.com/airforce270/mc-srv/server/serverstate"
 	"github.com/google/uuid"
 )
 
-const serverID = ""
+const (
+	serverID = ""
+
+	pingInterval      = 5 * time.Second
+	keepAliveInterval = 5 * time.Second
+)
 
 // errEnableEncryption is not an error per se,
 // but indicates to the caller that encryption should be used
 // for all future reads and writes.
 var errEnableEncryption = errors.New("enable encryption")
+
+var mojangHasJoinedURL = url.URL{Scheme: "https", Host: "sessionserver.mojang.com", Path: "session/minecraft/hasJoined"}
 
 type Conn struct {
 	state serverstate.State
@@ -36,6 +51,8 @@ type Conn struct {
 	playerUUID     uuid.UUID
 	sharedSecret   []byte
 	verifyToken    []byte
+
+	stopPingingClient func()
 }
 
 func NewConn() (*Conn, error) {
@@ -50,16 +67,8 @@ func NewConn() (*Conn, error) {
 	}, nil
 }
 
-func newLoggingReader(r io.Reader, logger *log.Logger) *bufio.Reader {
-	return bufio.NewReader(io.TeeReader(r, readLogger{log: logger}))
-}
-
-func newLoggingWriter(w io.Writer, logger *log.Logger) *bufio.Writer {
-	return bufio.NewWriter(io.MultiWriter(w, writeLogger{log: logger}))
-}
-
 // handleConn handles a new connection.
-func (c *Conn) Handle(conn net.Conn) {
+func (c *Conn) Handle(ctx context.Context, conn net.Conn) {
 	logger := log.New(os.Stderr, fmt.Sprintf("[%s] ", conn.RemoteAddr().String()), log.Flags()|log.Lmsgprefix)
 	br := newLoggingReader(conn, logger)
 	bw := newLoggingWriter(conn, logger)
@@ -69,7 +78,14 @@ func (c *Conn) Handle(conn net.Conn) {
 
 	defer conn.Close()
 	for {
-		err := c.handlePacket(r, w, logger)
+		select {
+		case <-ctx.Done():
+			logger.Print("Context done, closing conn")
+			return
+		default:
+		}
+
+		err := c.handlePacket(ctx, r, w, logger)
 		if err != nil {
 			if errors.Is(err, crypto.ErrCloseConn) {
 				logger.Printf("Failed to handle packet, closing conn: %v", err)
@@ -101,8 +117,12 @@ func (c *Conn) Handle(conn net.Conn) {
 	}
 }
 
-func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error {
-	p, err := packet.Read(r, c.state, logger)
+func (c *Conn) Close() error {
+	return nil
+}
+
+func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logger *log.Logger) error {
+	p, err := readpacket.Read(r, c.state, logger)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return fmt.Errorf("got EOF, closing: %w %w", err, crypto.ErrCloseConn)
@@ -115,13 +135,13 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 	logger.Printf("Received %s: %+v", p.Name(), p)
 
 	switch pp := p.(type) {
-	case packet.StatusRequest:
+	case slp.StatusRequest:
 		// do nothing
-	case packet.Handshake:
+	case slp.Handshake:
 		switch pp.NextState {
-		case packet.HandshakeNextStateStatus:
+		case slp.HandshakeNextStateStatus:
 			c.state = serverstate.ClientRequestingStatus
-			sr, err := packet.NewStatusResponse(int(pp.ProtocolVersion))
+			sr, err := slp.NewStatusResponse(int(pp.ProtocolVersion))
 			if err != nil {
 				return fmt.Errorf("failed to create status response: %w", err)
 			} else {
@@ -130,21 +150,21 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 				}
 				logger.Print("Wrote status response")
 			}
-		case packet.HandshakeNextStateLogin:
+		case slp.HandshakeNextStateLogin:
 			c.state = serverstate.ClientRequestingLogin
 		}
-	case packet.PingRequest:
-		err := packet.PingResponse{Payload: pp.Payload}.Write(w)
+	case slp.HandshakePingRequest:
+		err := slp.HandshakePingResponse{Payload: pp.Payload}.Write(w)
 		if err != nil {
 			return fmt.Errorf("failed to write ping response: %w  ", err)
 		} else {
 			logger.Print("Wrote ping response")
 		}
-	case packet.LoginStart:
+	case login.LoginStart:
 		c.playerUsername = pp.PlayerName
 		c.playerUUID = pp.PlayerUUID
 
-		er := packet.EncryptionRequest{
+		er := login.EncryptionRequest{
 			ServerID:          serverID,
 			PublicKeyLength:   int32(len(crypto.PublicKeyPKIX)),
 			PublicKey:         crypto.PublicKeyPKIX,
@@ -157,7 +177,7 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 			logger.Print("Wrote encryption request")
 			c.state = serverstate.EncryptionRequested
 		}
-	case packet.EncryptionResponse:
+	case login.EncryptionResponse:
 		var err error
 		c.sharedSecret, err = crypto.PrivateKey.Decrypt(crypto.RandReader, pp.SharedSecret, crypto.DecryptOpts)
 		if err != nil {
@@ -169,8 +189,12 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 		hash.Write(c.sharedSecret)
 		hash.Write(crypto.PublicKeyPKIX)
 
-		digest := minecraftDigest(hash)
-		resp, err := http.Get(fmt.Sprintf("https://sessionserver.mojang.com/session/minecraft/hasJoined?username=%s&serverId=%s", c.playerUsername, digest))
+		reqURL := mojangHasJoinedURL
+		reqURL.RawQuery = url.Values{
+			"username": {c.playerUsername},
+			"serverId": {minecraftDigest(hash)},
+		}.Encode()
+		resp, err := http.Get(reqURL.String())
 		if err != nil {
 			return fmt.Errorf("failed to call Mojang Session hasJoined API: %w", err)
 		}
@@ -204,7 +228,7 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 			return fmt.Errorf("returned verify token (%x) does not match sent (%x), closing connection", verifyToken, c.verifyToken)
 		}
 
-		ls := packet.LoginSuccess{
+		ls := login.LoginSuccess{
 			UUID:     c.playerUUID,
 			Username: c.playerUsername,
 		}
@@ -223,8 +247,14 @@ func (c *Conn) handlePacket(r io.Reader, w io.Writer, logger *log.Logger) error 
 			c.state = serverstate.LoginCompletePendingAcknowledgement
 			return errEnableEncryption
 		}
-	case packet.LoginAcknowledgement:
+	case login.LoginAcknowledgement:
 		c.state = serverstate.LoginComplete
+		ping := pinger.New(pingInterval, w)
+		go ping.StartPinging(ctx, logger)
+		keepAlive := keepaliver.New(keepAliveInterval, w)
+		go keepAlive.StartPinging(ctx, logger)
+	case config.AcknowledgeFinishConfiguration:
+		c.state = serverstate.ConfigurationComplete
 	}
 
 	return nil
@@ -250,6 +280,14 @@ type HasJoinedResponseProperty struct {
 	Value string `json:"value"`
 	// Signature of the value.
 	Signature string `json:"signature"`
+}
+
+func newLoggingReader(r io.Reader, logger *log.Logger) *bufio.Reader {
+	return bufio.NewReader(io.TeeReader(r, readLogger{log: logger}))
+}
+
+func newLoggingWriter(w io.Writer, logger *log.Logger) *bufio.Writer {
+	return bufio.NewWriter(io.MultiWriter(w, writeLogger{log: logger}))
 }
 
 // stringToASCII converts a UTF-8 string to ASCII bytes.

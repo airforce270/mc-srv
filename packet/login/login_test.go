@@ -1,4 +1,4 @@
-package packet_test
+package login_test
 
 import (
 	"bytes"
@@ -7,7 +7,8 @@ import (
 
 	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/id"
-	"github.com/airforce270/mc-srv/packet/logintest"
+	"github.com/airforce270/mc-srv/packet/login"
+	"github.com/airforce270/mc-srv/packet/login/logintest"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 )
@@ -23,12 +24,12 @@ func TestReadLoginStart(t *testing.T) {
 	tests := []struct {
 		desc  string
 		input []byte
-		want  packet.LoginStart
+		want  login.LoginStart
 	}{
 		{
 			desc:  "notchian example",
 			input: logintest.NotchianLoginStart,
-			want: packet.LoginStart{
+			want: login.LoginStart{
 				Header:     inHeader,
 				PlayerName: "airfors",
 				PlayerUUID: uuid.MustParse("8996cb86-cb63-4c2d-8b45-7cdfd7b542c8"),
@@ -40,7 +41,7 @@ func TestReadLoginStart(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := packet.ReadLoginStart(bytes.NewReader(tc.input), inHeader)
+			got, err := login.ReadLoginStart(bytes.NewReader(tc.input), inHeader)
 			if err != nil {
 				t.Fatalf("ReadLoginStart() unexpected err: %v", err)
 			}
@@ -57,12 +58,12 @@ func TestWriteEncryptionRequest(t *testing.T) {
 
 	tests := []struct {
 		desc  string
-		input packet.EncryptionRequest
+		input login.EncryptionRequest
 		want  []byte
 	}{
 		{
 			desc: "standard",
-			input: packet.EncryptionRequest{
+			input: login.EncryptionRequest{
 				ServerID:          "",
 				PublicKeyLength:   3,
 				PublicKey:         []byte{0x01, 0x02, 0x03},
@@ -119,12 +120,12 @@ func TestReadEncryptionResponse(t *testing.T) {
 	tests := []struct {
 		desc  string
 		input []byte
-		want  packet.EncryptionResponse
+		want  login.EncryptionResponse
 	}{
 		{
 			desc:  "notchian example",
 			input: logintest.NotchianEncryptionResponse,
-			want: packet.EncryptionResponse{
+			want: login.EncryptionResponse{
 				Header:             inHeader,
 				SharedSecretLength: 5,
 				SharedSecret:       []byte{0x01, 0x02, 0x03, 0x04, 0x05},
@@ -138,7 +139,7 @@ func TestReadEncryptionResponse(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := packet.ReadEncryptionResponse(bytes.NewReader(tc.input), inHeader)
+			got, err := login.ReadEncryptionResponse(bytes.NewReader(tc.input), inHeader)
 			if err != nil {
 				t.Fatalf("ReadEncryptionResponse() unexpected err: %v", err)
 			}
