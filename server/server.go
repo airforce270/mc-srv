@@ -24,8 +24,8 @@ import (
 	"github.com/airforce270/mc-srv/packet/login"
 	"github.com/airforce270/mc-srv/packet/readpacket"
 	"github.com/airforce270/mc-srv/packet/slp"
+	"github.com/airforce270/mc-srv/packet/types"
 	"github.com/airforce270/mc-srv/server/keepaliver"
-	"github.com/airforce270/mc-srv/server/pinger"
 	"github.com/airforce270/mc-srv/server/serverstate"
 	"github.com/google/uuid"
 )
@@ -45,84 +45,111 @@ var errEnableEncryption = errors.New("enable encryption")
 var mojangHasJoinedURL = url.URL{Scheme: "https", Host: "sessionserver.mojang.com", Path: "session/minecraft/hasJoined"}
 
 type Conn struct {
-	state serverstate.State
+	state  serverstate.State
+	conn   net.Conn
+	logger *log.Logger
+
+	br *bufio.Reader
+	bw *bufio.Writer
 
 	playerUsername string
 	playerUUID     uuid.UUID
 	sharedSecret   []byte
 	verifyToken    []byte
-
-	stopPingingClient func()
 }
 
-func NewConn() (*Conn, error) {
+func NewConn(conn net.Conn) (*Conn, error) {
 	verifyToken := make([]byte, 4)
 	if _, err := crypto.RandReader.Read(verifyToken); err != nil {
 		return nil, fmt.Errorf("failed to generate verify token: %w", err)
 	}
 
+	logger := log.New(os.Stderr, fmt.Sprintf("[%s] ", conn.RemoteAddr().String()), log.Flags()|log.Lmsgprefix)
+
 	return &Conn{
 		state:       serverstate.PreHandshake,
+		conn:        conn,
+		logger:      logger,
+		br:          newLoggingReader(conn, logger),
+		bw:          newLoggingWriter(conn, logger),
 		verifyToken: verifyToken,
 	}, nil
 }
 
 // handleConn handles a new connection.
-func (c *Conn) Handle(ctx context.Context, conn net.Conn) {
-	logger := log.New(os.Stderr, fmt.Sprintf("[%s] ", conn.RemoteAddr().String()), log.Flags()|log.Lmsgprefix)
-	br := newLoggingReader(conn, logger)
-	bw := newLoggingWriter(conn, logger)
+func (c *Conn) Handle(ctx context.Context) {
+	var r io.Reader = c.br
+	var w io.Writer = c.bw
 
-	var r io.Reader = br
-	var w io.Writer = bw
-
-	defer conn.Close()
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Print("Context done, closing conn")
+			c.logger.Print("Context done, closing conn")
 			return
 		default:
 		}
 
-		err := c.handlePacket(ctx, r, w, logger)
+		err := c.handlePacket(ctx, r, w)
 		if err != nil {
-			if errors.Is(err, crypto.ErrCloseConn) {
-				logger.Printf("Failed to handle packet, closing conn: %v", err)
-				break
+			if errors.Is(err, net.ErrClosed) || errors.Is(err, crypto.ErrCloseConn) {
+				c.logger.Printf("Failed to handle packet, closing conn: %v", err)
+				return
 			} else if errors.Is(err, errEnableEncryption) {
-				logger.Printf("Enabling encryption for read stream...")
-				if cr, err := crypto.NewDecryptReader(conn, c.sharedSecret); err == nil {
-					r = newLoggingReader(cr, logger)
-					logger.Printf("Enabled encryption for read stream.")
+				c.logger.Printf("Enabling encryption for read stream...")
+				if cr, err := crypto.NewDecryptReader(c.conn, c.sharedSecret); err == nil {
+					r = newLoggingReader(cr, c.logger)
+					c.logger.Printf("Enabled encryption for read stream.")
 				} else {
-					logger.Printf("Failed to enable encryption for read stream: %v", err)
+					c.logger.Printf("Failed to enable encryption for read stream: %v", err)
 				}
 
-				logger.Printf("Enabling encryption for write stream...")
+				c.logger.Printf("Enabling encryption for write stream...")
 				if cw, err := crypto.NewEncryptWriter(w, c.sharedSecret); err == nil {
-					w = newLoggingWriter(cw, logger)
-					logger.Printf("Enabled encryption for write stream.")
+					w = newLoggingWriter(cw, c.logger)
+					c.logger.Printf("Enabled encryption for write stream.")
 				} else {
-					logger.Printf("Failed to enable encryption for write stream: %v", err)
+					c.logger.Printf("Failed to enable encryption for write stream: %v", err)
 				}
 
 			} else {
-				logger.Printf("Failed to handle packet: %v", err)
+				c.logger.Printf("Failed to handle packet: %v", err)
 			}
 		}
-		if err := bw.Flush(); err != nil {
-			logger.Printf("Flushing conn write buffer failed: %v", err)
+		if err := c.bw.Flush(); err != nil {
+			c.logger.Printf("Flushing conn write buffer failed: %v", err)
 		}
 	}
 }
 
-func (c *Conn) Close() error {
-	return nil
+// Disconnect disconnects the client and closes the conn.
+func (c *Conn) Disconnect(reason types.TextComponent) {
+	switch {
+	case c.state < serverstate.LoginComplete:
+		break
+	case c.state < serverstate.ConfigurationComplete:
+		p := config.Disconnect{Reason: reason}
+		if err := p.Write(c.bw); err != nil {
+			c.logger.Printf("Disconnecting: failed to write disconnect packet: %v", err)
+			break
+		}
+		if err := c.bw.Flush(); err != nil {
+			c.logger.Printf("Disconnecting: failed to flush writer: %v", err)
+			break
+		}
+	}
+
+	if err := c.Close(); err != nil {
+		c.logger.Printf("Disconnecting: failed to close conn: %v", err)
+	}
 }
 
-func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logger *log.Logger) error {
-	p, err := readpacket.Read(r, c.state, logger)
+// Close closes the conn.
+func (c *Conn) Close() error {
+	return c.conn.Close()
+}
+
+func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer) error {
+	p, err := readpacket.Read(r, c.state, c.logger)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return fmt.Errorf("got EOF, closing: %w %w", err, crypto.ErrCloseConn)
@@ -132,7 +159,7 @@ func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logge
 	if p == nil {
 		return nil
 	}
-	logger.Printf("Received %s: %+v", p.Name(), p)
+	c.logger.Printf("Received %T%+v", p, p)
 
 	switch pp := p.(type) {
 	case slp.StatusRequest:
@@ -144,12 +171,11 @@ func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logge
 			sr, err := slp.NewStatusResponse(int(pp.ProtocolVersion))
 			if err != nil {
 				return fmt.Errorf("failed to create status response: %w", err)
-			} else {
-				if err := sr.Write(w); err != nil {
-					return fmt.Errorf("failed to write status response: %w", err)
-				}
-				logger.Print("Wrote status response")
 			}
+			if err := sr.Write(w); err != nil {
+				return fmt.Errorf("failed to write status response: %w", err)
+			}
+			c.logger.Print("Wrote status response")
 		case slp.HandshakeNextStateLogin:
 			c.state = serverstate.ClientRequestingLogin
 		}
@@ -157,9 +183,8 @@ func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logge
 		err := slp.HandshakePingResponse{Payload: pp.Payload}.Write(w)
 		if err != nil {
 			return fmt.Errorf("failed to write ping response: %w  ", err)
-		} else {
-			logger.Print("Wrote ping response")
 		}
+		c.logger.Print("Wrote ping response")
 	case login.LoginStart:
 		c.playerUsername = pp.PlayerName
 		c.playerUUID = pp.PlayerUUID
@@ -173,10 +198,9 @@ func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logge
 		}
 		if err := er.Write(w); err != nil {
 			return fmt.Errorf("failed to write encryption request: %w", err)
-		} else {
-			logger.Print("Wrote encryption request")
-			c.state = serverstate.EncryptionRequested
 		}
+		c.logger.Print("Wrote encryption request")
+		c.state = serverstate.EncryptionRequested
 	case login.EncryptionResponse:
 		var err error
 		c.sharedSecret, err = crypto.PrivateKey.Decrypt(crypto.RandReader, pp.SharedSecret, crypto.DecryptOpts)
@@ -238,21 +262,30 @@ func (c *Conn) handlePacket(ctx context.Context, r io.Reader, w io.Writer, logge
 			return fmt.Errorf("failed to create encrypter: %w", err)
 		}
 
-		logger.Print("Warning: next logged write is the encrypted bytes, not the raw bytes.")
+		c.logger.Print("Warning: next logged write is the encrypted bytes, not the raw bytes.")
 
-		if err := ls.Write(cw, logger); err != nil {
+		if err := ls.Write(cw, c.logger); err != nil {
 			return fmt.Errorf("failed to write login success: %w", err)
-		} else {
-			logger.Print("Wrote login success")
-			c.state = serverstate.LoginCompletePendingAcknowledgement
-			return errEnableEncryption
 		}
+		c.logger.Print("Wrote login success")
+		c.state = serverstate.LoginCompletePendingAcknowledgement
+		return errEnableEncryption
 	case login.LoginAcknowledgement:
 		c.state = serverstate.LoginComplete
-		ping := pinger.New(pingInterval, w)
-		go ping.StartPinging(ctx, logger)
 		keepAlive := keepaliver.New(keepAliveInterval, w)
-		go keepAlive.StartPinging(ctx, logger)
+		go keepAlive.StartPinging(ctx, c.logger)
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-keepAlive.Notifier():
+				c.Disconnect(types.TextComponent{
+					Text: "Timeout - failed to respond to keepalive",
+				})
+				return
+			}
+		}()
+	case config.ConfigClientInformation:
 	case config.AcknowledgeFinishConfiguration:
 		c.state = serverstate.ConfigurationComplete
 	}

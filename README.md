@@ -27,7 +27,7 @@ A simple Minecraft server to play around with the protocol.
 - [ ] Send disconnect packets when needed
 - [ ] Send finish configuration packet
 - [x] Send keep alive packets
-- [x] Send ping packets
+- [x] Send ping packets (not needed)
 - [ ] Send registry data packet
 - [ ] Send remove resource pack packet
 - [ ] Send add resource pack packet
@@ -38,9 +38,8 @@ A simple Minecraft server to play around with the protocol.
 - [x] Handle serverbound plugin message packet
 - [ ] Handle acknowledge finish configuration packet
 - [x] Handle serverbound keep alive packets
-- [ ] Disconnect clients if they don't respond to keepalive pings in a reasonable time
-- [x] Handle pong packets
-- [ ] Do something with handled pong packets
+- [x] Disconnect clients if they don't respond to keepalive pings in a reasonable time
+- [x] Handle pong packets (not needed)
 - [x] Handle resource pack response packets
 - [ ] Store data from resource pack response packets(?)
 

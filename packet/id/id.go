@@ -57,7 +57,7 @@ const (
 
 	// Configuration
 	ClientboundPlugin        ID = 0x00
-	Disconnect               ID = 0x01
+	ConfigDisconnect         ID = 0x01
 	FinishConfiguration      ID = 0x02
 	ClientboundKeepAlive     ID = 0x03
 	Ping                     ID = 0x04

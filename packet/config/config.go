@@ -2,11 +2,13 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 
 	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/id"
+	"github.com/airforce270/mc-srv/packet/types"
 	"github.com/airforce270/mc-srv/packet/writepacket"
 	"github.com/airforce270/mc-srv/read"
 	"github.com/airforce270/mc-srv/write"
@@ -154,6 +156,54 @@ func ReadConfigServerboundPlugin(r io.Reader, header packet.Header) (ConfigServe
 	return p, nil
 }
 
+// Packet sent by the server to notify the client they should disconnect.
+type Disconnect struct {
+	packet.Header
+
+	// The reason the client was disconnected.
+	Reason types.TextComponent
+}
+
+func (Disconnect) Name() string { return "Disconnect(config)" }
+
+// Write writes the Disconnect to the writer.
+func (p *Disconnect) Write(w io.Writer) error {
+	var buf bytes.Buffer
+
+	reason, err := json.Marshal(p.Reason)
+	if err != nil {
+		return fmt.Errorf("failed to marshal disconnect reason: %w", err)
+	}
+	if err := write.String(&buf, string(reason)); err != nil {
+		return fmt.Errorf("failed to write disconnect reason: %w", err)
+	}
+
+	if err := writepacket.Write(w, id.ConfigDisconnect, &buf); err != nil {
+		return fmt.Errorf("failed to write disconnect packet: %w", err)
+	}
+
+	return nil
+}
+
+// Packet sent by the server to notify the client
+// the configuration process has finished.
+type FinishConfiguration struct {
+	packet.Header
+}
+
+func (FinishConfiguration) Name() string { return "FinishConfiguration" }
+
+// Write writes the FinishConfiguration to the writer.
+func (p *FinishConfiguration) Write(w io.Writer) error {
+	var buf bytes.Buffer
+
+	if err := writepacket.Write(w, id.FinishConfiguration, &buf); err != nil {
+		return fmt.Errorf("failed to write finish configuration packet: %w", err)
+	}
+
+	return nil
+}
+
 // Packet sent by the client to notify the server
 // the configuration process has finished.
 // Sent in response to FinishConfiguration.
@@ -175,6 +225,21 @@ type ClientboundKeepAlive struct {
 }
 
 func (ClientboundKeepAlive) Name() string { return "ClientboundKeepAlive" }
+
+// Write writes the ClientboundKeepAlive to the writer.
+func (p *ClientboundKeepAlive) Write(w io.Writer) error {
+	var buf bytes.Buffer
+
+	if err := write.Long(&buf, p.KeepAliveID); err != nil {
+		return fmt.Errorf("failed to write clientbound keepalive id %d: %w", p.KeepAliveID, err)
+	}
+
+	if err := writepacket.Write(w, id.ClientboundKeepAlive, &buf); err != nil {
+		return fmt.Errorf("failed to write clientbound keepalive packet: %w", err)
+	}
+
+	return nil
+}
 
 // Client->server response to the server->client keep alive packets.
 type ServerboundKeepAlive struct {

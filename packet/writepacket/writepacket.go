@@ -16,7 +16,7 @@ func Write(w io.Writer, id id.ID, payload readLengther) error {
 		Length:   int32(id.Len() + payloadLen),
 		PacketID: id,
 	}
-	if err := h.Write(w); err != nil {
+	if err := h.WriteHeader(w); err != nil {
 		return fmt.Errorf("failed to write packet header (%+v): %w", h, err)
 	}
 

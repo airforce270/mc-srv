@@ -8,6 +8,7 @@ import (
 
 	"github.com/airforce270/mc-srv/packet"
 	"github.com/airforce270/mc-srv/packet/id"
+	"github.com/airforce270/mc-srv/packet/types"
 	"github.com/airforce270/mc-srv/packet/writepacket"
 	"github.com/airforce270/mc-srv/write"
 )
@@ -28,7 +29,7 @@ func (sr StatusRequest) Name() string { return "StatusRequest" }
 type statusResponseJSON struct {
 	Version            statusResponseVersion `json:"version"`
 	Players            statusResponsePlayers `json:"players"`
-	Description        textComponent         `json:"description"`
+	Description        types.TextComponent   `json:"description"`
 	Favicon            string                `json:"favicon"`
 	EnforcesSecureChat bool                  `json:"enforcesSecureChat"`
 	PreviewsChat       bool                  `json:"previewsChat"`
@@ -46,9 +47,6 @@ type statusResponseSample struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
 }
-type textComponent struct {
-	Text string `json:"text"`
-}
 
 func NewStatusResponse(protocol int) (StatusResponse, error) {
 	resp, err := json.Marshal(statusResponseJSON{
@@ -61,7 +59,7 @@ func NewStatusResponse(protocol int) (StatusResponse, error) {
 			Online:  12,
 			Samples: nil,
 		},
-		Description: textComponent{
+		Description: types.TextComponent{
 			Text: "The Minecraft client-server protocol kinda sucks ngl",
 		},
 		Favicon:            iconDataURI,

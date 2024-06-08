@@ -20,7 +20,7 @@ type Header struct {
 // ID returns the packet ID of the header.
 func (h Header) ID() id.ID { return h.PacketID }
 
-func (h Header) Write(w io.Writer) error {
+func (h Header) WriteHeader(w io.Writer) error {
 	if err := write.VarInt(w, h.Length); err != nil {
 		return fmt.Errorf("failed to write header length (%d): %w", h.Length, err)
 	}

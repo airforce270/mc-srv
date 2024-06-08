@@ -61,13 +61,17 @@ func main() {
 		conn.SetKeepAlive(true)
 		log.Printf("New connection from %s", conn.RemoteAddr().String())
 
-		c, err := server.NewConn()
+		c, err := server.NewConn(conn)
 		if err != nil {
 			log.Printf("Failed to create connection handler: %v", err)
 			conn.Close()
 			continue
 		}
 		defer c.Close()
-		go c.Handle(ctx, conn)
+		go func() {
+			connCtx, cancelConn := context.WithCancel(ctx)
+			c.Handle(connCtx)
+			cancelConn()
+		}()
 	}
 }
